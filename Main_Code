@@ -1,0 +1,67 @@
+import tkinter as tk
+from tkinter import filedialog
+import os
+import re
+from tqdm import tqdm
+from io import StringIO
+from pdfminer.converter import TextConverter
+from pdfminer.pdfinterp import PDFPageInterpreter
+from pdfminer.pdfinterp import PDFResourceManager
+from pdfminer.pdfpage import PDFPage
+from pdfminer.layout import LAParams
+from pdfminer.pdfinterp import PDFPageInterpreter, PDFResourceManager
+from pdfminer.pdfpage import PDFPage
+from pdfminer.converter import PDFPageAggregator
+
+
+
+root = tk.Tk()
+root.withdraw()
+
+def extract_text_from_pdf(pdf_path):
+    resource_manager = PDFResourceManager()
+    device = PDFPageAggregator(resource_manager)
+    interpreter = PDFPageInterpreter(resource_manager, device)
+    laparams = LAParams()
+    with open(pdf_path, 'rb') as fh:
+        for page in PDFPage.get_pages(fh, caching=True, check_extractable=True):
+            interpreter.process_page(page)
+            layout = device.get_result()
+            for element in layout:
+                if element.get_text() and (element.get_text()).strip():
+                    yield element.get_text(), element.bbox
+
+
+
+# Function to scan through a folder and its subfolders
+def scan_folder(folder_path, phrase):
+    # Create a dictionary to store the results
+    results = {}
+    # Iterate through the selected folder and its subfolders
+    for root, dirs, files in os.walk(folder_path):
+        for file in tqdm(files):
+            file_path = os.path.join(root, file)
+            # Check if the file is a pdf file
+            if file.endswith(".pdf"):
+                matches = []
+                for text, bbox, page_id in extract_text_from_pdf(file_path):
+                    # Search for the specified phrase
+                    match = re.search(phrase, text)
+                    if match:matches.append({'word': phrase, 'location': bbox, 'page': page_id+1})
+                results[file_path] = matches
+    # prompt the user to select a location to save the text file
+    file_path = filedialog.asksaveasfilename(defaultextension=".txt", 
+                                             initialfile="results.txt", 
+                                             initialdir=folder_path)
+    # write the results to the selected text file
+    with open(file_path, 'w') as f:
+        for key, value in results.items():
+            for match in value:
+                f.write(key + " : " + match['word'] + " found at " + str(match['location']) + " on page " + str(match['page']) + '\n')
+    return results
+
+# Example usage
+folder_path = filedialog.askdirectory(initialdir = "C:/", title = "Select folder")
+phrase = input("Enter the phrase you want to search for: ")
+results = scan_folder(folder_path, phrase)
+
